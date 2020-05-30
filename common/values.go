@@ -1,0 +1,9 @@
+package common
+
+const ListKey = "medis"      // 存储已生成数据的键名
+const MaxKey = "mdx"         // 存储当前最大值的键名
+const Capacity = int(1e5)    // 信道容量
+const Persent = float64(0.7) // 信道容量阈值百分比
+const Multiple = 5
+const RandMin = 0
+const RandMax = 255
