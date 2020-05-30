@@ -19,6 +19,7 @@
 package mist
 
 import (
+	"fmt"
 	"math/rand"
 	"medis/common"
 	"time"
@@ -34,14 +35,15 @@ const increasShift = saltBit + sequenceBit    // 高位数移位数
 /* 生成区间范围内的随机数 */
 func RandInt64(duration int64) int64 {
 	rand.Seed(duration) // 时间戳作为随机因子
-	return rand.Int63n(common.RandMax-common.RandMin) + common.RandMin
+	return rand.Int63n(common.RandMax)
 }
 
 /* 生成唯一编号 */
 func Generate(increas int64) int64 {
 	now := time.Now()
-	saltA := RandInt64(now.Unix())
-	saltB := RandInt64(now.UnixNano())
+	saltA := RandInt64(now.UnixNano() / 1e1)
+	saltB := RandInt64(now.UnixNano() / 1e2)
+	fmt.Println(saltA, saltB)
 	mist := int64((increas << increasShift) | (saltA << saltShift) | saltB) // 通过位运算实现自动占位
 	return mist
 }
