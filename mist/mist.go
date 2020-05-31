@@ -20,7 +20,6 @@ package mist
 
 import (
 	"crypto/rand"
-	"fmt"
 	"math/big"
 )
 
@@ -34,7 +33,6 @@ func Generate(increas int64) int64 {
 	saltA := randA.Int64()
 	randB, _ := rand.Int(rand.Reader, big.NewInt(255))
 	saltB := randB.Int64()
-	fmt.Println(saltA, saltB)
 	mist := int64((increas << increasShift) | (saltA << saltShift) | saltB) // 通过位运算实现自动占位
 	return mist
 }
