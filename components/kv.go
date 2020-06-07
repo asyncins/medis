@@ -2,8 +2,9 @@ package components
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -62,107 +63,107 @@ func Surplus(key string) (int, error) {
 	return int(r.(int64)), nil
 }
 
-// 移除列表最右元素
-func Rpop(key string) (int, error) {
-	var value int
+// 分批写入 写入数不低于公共数字单位，且要求为公共数字单位的整数倍
+func PushPipeline(supplement int) error {
 	conn, err := ConnectKv()
 	defer conn.Close()
-	if err != nil {
-		return 0, err
-	}
-	r, err := conn.Do("RPOP", key)
-	if err != nil || r == nil {
-		return value, errors.New("")
-	}
-	value, _ = strconv.Atoi(string(r.(interface{}).([]uint8)))
-	return value, nil
-}
-
-// 向列表最左添加元素
-func Lpush(key string, val int) error {
-	conn, err := ConnectKv()
-	defer conn.Close()
+	current, _ := GetMax(MaxKey)
 	if err != nil {
 		return err
 	}
-	_, err = conn.Do("LPUSH", key, val)
-	return err
-}
-
-// 分批写入
-func PushPipeline(supplement, current int) error {
-	// 写入数不低于万，且要求为万的整数倍
-	conn, err := ConnectKv()
-	defer conn.Close()
-	if err != nil {
-		return err
-	}
-	batch := int(math.Floor(float64(supplement) / 1e4))
+	batch := int(math.Floor(float64(supplement) / Unit))
 	for i := 0; i < batch; i++ {
-		for x := (current + 1); x < (current + 1e4 + 1); x++ {
-			conn.Send("LPUSH", ListKey, x)
+		for x := (current + 1); x < (current + int(Unit) + 1); x++ {
+			sequence := Generate(int64(x)) // 预生成 预存
+			conn.Send("LPUSH", ListKey, int(sequence))
 		}
 		conn.Flush()
-		current = current + 1e4
+		current = current + int(Unit)
 	}
 	err = SetMax(MaxKey, current) // 将最大值写入 kv
 	return err
 }
 
-// 分批读取 性能约为单次读取的十倍
+// 分批读取 读取数不低于公共数字单位 性能约为单次读取的十倍
 func RpopPipeline(channel chan int, need int) error {
-	// 读取数不低于千
+	mutex.Lock()
 	conn, err := ConnectKv()
 	defer conn.Close()
 	if err != nil {
 		return err
 	}
-	batch := int(math.Floor(float64(need) / 1e3))
-	for i := 0; i < batch; i++ {
-		for x := 0; x < 1e3; x++ {
-			if len(channel) == cap(channel) {
-				break // 信道满时停止写入值
-			}
-			conn.Send("RPOP", ListKey)
-			conn.Flush()
-			reply, errs := conn.Receive()
-			if errs != nil || reply == 0 || reply == nil {
-				break // kv 已取空
-			}
-			value, _ := strconv.Atoi(string(reply.(interface{}).([]uint8)))
-			channel <- value
-		}
+	// 获取远端存储当前余量 用于取值定位
+	llen, err := conn.Do("LLEN", ListKey)
+	if err != nil {
+		return err
 	}
-	return err
-}
+	spls := int(llen.(int64))
+	fmt.Println("channel len:", len(instance.Channel))
+	fmt.Println("kv surplus: ", spls, "  need: ", need)
 
-func KvToChannel(channel chan int, need, supplement int) error {
-	mutex.Lock()
-	err := KvSupplement(supplement)
+	// 事务确保批量取值和批量减值正常进行 此操作相当于批量弹出
+	conn.Send("MULTI")
+	conn.Send("LRANGE", ListKey, spls-need, spls)
+	conn.Send("LTRIM", ListKey, spls-need, -1)
+	values, err := redis.Values(conn.Do("EXEC"))
 	if err != nil {
 		mutex.Unlock()
 		return err
 	}
-	RpopPipeline(channel, need)
+
+	var sli []int // 便于排序
+
+	// 返回多值 通过控制流和断言进行值的转换
+	for _, value := range values {
+		switch value.(type) {
+		case string:
+			continue
+		case interface{}:
+			for _, val := range value.([]interface{}) {
+				if val != nil {
+					mst, _ := strconv.Atoi((string(val.([]uint8))))
+					sli = append(sli, mst)
+				}
+			}
+		default:
+			continue
+		}
+	}
+	// 升序排序
+	sort.Slice(sli, func(i, j int) bool {
+		return sli[i] < sli[j]
+	})
+	fmt.Println("补充了 ", len(sli))
+	// 按序推入信道
+	for _, mst := range sli {
+		channel <- mst
+	}
+	fmt.Println("补充后信道", len(channel))
 	mutex.Unlock()
+	return err
+}
+
+func KvToChannel(channel chan int, need, thresshold int) error {
+	err := KvSupplement(thresshold)
+	if err != nil {
+		return err
+	}
+	RpopPipeline(channel, need)
 	return nil
 }
 
 // 补充
-func KvSupplement(supplement int) error {
+func KvSupplement(thresshold int) error {
+	mutex.Lock()
 	surplus, err := Surplus(ListKey)
 	if err != nil {
+		mutex.Unlock()
 		return err
 	}
-	if surplus < supplement {
-		current, ers := GetMax(MaxKey)
-		log.Println("max: ", current)
-		if ers != nil {
-			return ers
-		}
-		go func() {
-			PushPipeline(supplement, current)
-		}()
+	if surplus < thresshold {
+		fmt.Println("current surplus: ", surplus, "  小于 thresshold: ", thresshold, "  补充一波 ", instance.KvSupplement)
+		PushPipeline(instance.KvSupplement)
 	}
+	mutex.Unlock()
 	return nil
 }

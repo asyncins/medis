@@ -12,7 +12,7 @@ func main() {
 	server.GET("/seqence", handler.Seqence)
 	current, err := components.GetMax(components.MaxKey)
 	if err != nil {
-		server.Logger.Fatal(server.Start(":1323"))
+		server.Logger.Fatal(server.Start(":1558"))
 	}
 	if current == 0 {
 		components.MagazineInstance(false)
@@ -20,5 +20,5 @@ func main() {
 	} else {
 		components.MagazineInstance(true)
 	}
-	server.Logger.Fatal(server.Start(":1323"))
+	server.Logger.Fatal(server.Start(":1558"))
 }
