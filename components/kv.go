@@ -2,7 +2,6 @@ package components
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -74,18 +73,10 @@ func PushPipeline(supplement int) error {
 		return err
 	}
 	batch := int(math.Floor(float64(supplement) / Unit))
-	var pre int
 	for i := 0; i < batch; i++ {
-		fmt.Println("max: ", current)
 		for x := (current + 1); x < (current + int(Unit) + 1); x++ {
-			if pre >= x {
-				fmt.Println("pre > x", pre, x)
-				panic("sssssssssss")
-			}
-			// sequence := Generate(int64(x)) // 预生成 预存
-			// conn.Send("LPUSH", ListKey, int(sequence))
-			// fmt.Println("to kv ->", x)
-			conn.Send("LPUSH", ListKey, x)
+			sequence := Generate(int64(x)) // 预生成 预存
+			conn.Send("LPUSH", ListKey, int(sequence))
 		}
 		conn.Flush()
 		current = current + int(Unit)
@@ -101,21 +92,16 @@ func RpopPipeline(channel chan int, need int) error {
 	conn, err := ConnectKv()
 	defer conn.Close()
 	if err != nil {
-		// Freedom = 0
 		mutex.Unlock()
 		return err
 	}
 	// 获取远端存储当前余量 用于取值定位
 	llen, err := conn.Do("LLEN", ListKey)
 	if err != nil {
-		// Freedom = 0
 		mutex.Unlock()
 		return err
 	}
 	spls := int(llen.(int64))
-	fmt.Println("从 kv 取值到 channel，取 ", need)
-	fmt.Println("channel len:", len(instance.Channel))
-	fmt.Println("kv surplus: ", spls, "  need: ", need)
 
 	// 事务确保批量取值和批量减值正常进行 此操作相当于批量弹出
 	conn.Send("MULTI")
@@ -123,7 +109,6 @@ func RpopPipeline(channel chan int, need int) error {
 	conn.Send("LTRIM", ListKey, 0, spls-need-1)
 	values, err := redis.Values(conn.Do("EXEC"))
 	if err != nil {
-		// Freedom = 0
 		mutex.Unlock()
 		return err
 	}
@@ -151,23 +136,11 @@ func RpopPipeline(channel chan int, need int) error {
 	sort.Slice(sli, func(i, j int) bool {
 		return sli[i] < sli[j]
 	})
-	fmt.Println("补充了 ", len(sli))
 	// 按序推入信道
-	var pre int
 	for _, mst := range sli {
-		if pre >= mst {
-			fmt.Println("pre > mst", pre, mst)
-			panic("sssssssssss")
-		}
-		// if mst < 60000 {
-		// fmt.Println("to channel -> ", mst)
-		// }
 		channel <- mst
 	}
-	fmt.Println("补充后信道", len(channel))
 	mutex.Unlock()
-
-	// Freedom = 0
 	return err
 }
 
@@ -189,7 +162,6 @@ func KvSupplement(thresshold int) error {
 		return err
 	}
 	if surplus < thresshold {
-		fmt.Println("current surplus: ", surplus, "  小于 thresshold: ", thresshold, "  补充一波 ", instance.KvSupplement)
 		PushPipeline(instance.KvSupplement)
 	}
 	mutex.Unlock()
