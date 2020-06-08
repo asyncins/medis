@@ -52,8 +52,8 @@ Loop Count         Infinte
 
 ### 致谢
 
-谢谢 @青南 在 Redis 读取环节提供的 Lrange Ltrim 建议，我替换掉了循环 RPOP 操作，这使得读性能飙升；
+谢谢 *@青南* 在 Redis 读取环节提供的 Lrange Ltrim 建议，我替换掉了循环 RPOP 操作，这使得读性能飙升；
 
-谢谢 @Manjusaka 和 @夏溪辰 在 Gorouting 触发环节提供的全局变量和定时器建议，这里选用了全局变量锁定 Gorouting，效果相当好；
+谢谢 *@Manjusaka* 和 *@夏溪辰* 在 Gorouting 触发环节提供的全局变量和定时器建议，这里选用了全局变量锁定 Gorouting，效果相当好；
 
-谢谢 @夜幕团队 @崔庆才 @大鱼 @Lock 在性能测试和 Golang 方面的建议；
+谢谢 *@夜幕团队 @崔庆才 @大鱼 @Loco* 在性能测试和 Golang 方面的建议；
